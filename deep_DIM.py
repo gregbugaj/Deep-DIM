@@ -134,7 +134,11 @@ def model_eval(model,layer1,layer2,layer3,file_dir,use_cuda):
     featex=Featex(model, use_cuda,layer1,layer2,layer3)
     gt_list, pd_list = [], []
     num_samples = len(img_path) // 2
-    bar = progressbar.ProgressBar(max_value=num_samples)
+
+    
+    print("num_samples: ", num_samples)
+
+    # bar = progressbar.ProgressBar(max_value=num_samples)
     for idx in range(num_samples):
         # load image and ground truth
         template_raw = cv2.imread( img_path[2*idx] )[...,::-1]
@@ -151,7 +155,7 @@ def model_eval(model,layer1,layer2,layer3,file_dir,use_cuda):
             gt_list.append( image_gt )
             pd_list.append(image_pd)
             continue
-        bar.update(idx + 1)
+        # bar.update(idx + 1)
         x_gt, y_gt, w_gt, h_gt = [int(round(t)) for t in image_gt]
         image_plot = cv2.rectangle( image.copy(), (x_gt, y_gt), (x_gt+w_gt, y_gt+h_gt), (0, 255, 0), 2 )
         
@@ -218,8 +222,8 @@ def model_eval(model,layer1,layer2,layer3,file_dir,use_cuda):
         plt.ion()
         ax[0].imshow(template_plot)
         ax[1].imshow(image_plot)
-        ax[2].imshow(similarity, 'jet')
-        plt.savefig(root.format(n=idx+1,m=str(layer1)+'_'+str(layer2)+'_'+str(layer3)))
+        # ax[2].imshow(similarity, 'jet')
+        plt.savefig(root.format(n=idx+1,m=str(layer1)+'_'+str(layer2)+'_'+str(layer3))+'.png')
         plt.pause(0.0001)
         plt.close()
         print('Done, results saved')
@@ -232,7 +236,7 @@ args=parser.parse_args()
 dataset=args.Dataset
 file_dir = dataset+'data'
 gt = sorted([ os.path.join(file_dir, i) for i in os.listdir(file_dir)  if '.txt' in i ])
-img_path = sorted([ os.path.join(file_dir, i) for i in os.listdir(file_dir) if '.jpg' in i ] )    
+img_path = sorted([ os.path.join(file_dir, i) for i in os.listdir(file_dir) if '.png' in i ] )    
 model=models.vgg19(pretrained=False)
 checkpoint=torch.load('model/model_D.pth.tar', map_location=lambda storage, loc: storage)
 state_dict =checkpoint['state_dict']
@@ -242,13 +246,22 @@ for k, v in state_dict.items():
     new_state_dict[name]=v
 model.load_state_dict(new_state_dict)
 model=model.features
+
+print(gt)
+print(img_path)
+
 if args.Mode=='All':
     layers=(0,2,5,7,10,12,14,16,19,21,23,25,28,30,32,34)
 else:
     if dataset=='BBS':
         layers=(2,19,25)
+    elif dataset=='RMS':
+        layers=(2,14,16) # .675
+        layers=(5,10,12)
+        # layers=(5,12,14)
     else:
         layers=(0,16,21)
+        
 print(args.Dataset,args.Mode,layers)
 for i in range(len(layers)):
     for j in range(len(layers)):
