@@ -14,6 +14,9 @@ import matplotlib.pyplot as plt
 from DIM import *
 from collections import OrderedDict
 matplotlib.use('Agg')
+
+# https://debuggercafe.com/visualizing-filters-and-feature-maps-in-convolutional-neural-networks-using-pytorch/
+
 class Featex():
     def __init__(self, model, use_cuda,layer1,layer2,layer3):
         self.use_cuda = use_cuda
@@ -38,12 +41,45 @@ class Featex():
         
     def save_feature1(self, module, input, output):
         self.feature1 = output.detach()
+        print("feature 1")
+        print(self.feature1.shape)
+        self.visualize_feature(self.feature1, 'feature1')
 
     def save_feature2(self, module, input, output):
         self.feature2 = output.detach()
+        print("feature 2")
+        print(self.feature2.shape)
+        self.visualize_feature(self.feature2 , 'feature2')
+
     
     def save_feature3(self, module, input, output):
         self.feature3 = output.detach()
+        print("feature 3")
+        print(self.feature3.shape)
+        self.visualize_feature(self.feature3, 'feature3')
+
+    def visualize_feature(self, feature, name):
+        import matplotlib.pyplot as plt
+        feature = feature.cpu().numpy()
+  
+        # feature = (feature - feature.min()) / (feature.max() - feature.min())
+        # feature = (feature * 255).astype(np.uint8)
+
+        layer_viz = feature[0, :, :, :]
+        plt.figure(figsize=(30, 30))
+
+        for i, filter in enumerate(layer_viz):
+            if i == 64: # we will visualize only 8x8 blocks from each layer
+                break
+            plt.subplot(8, 8, i + 1)
+            plt.imshow(filter, cmap='jet')
+            plt.axis("off")
+
+        print(f"Saving layer {name} feature maps...")
+        plt.savefig(f"./results/layer_{name}_{i}.png")
+        plt.close()
+
+        
     def __call__(self, input, mode='normal'):
         channel=64
         if self.use_cuda:
@@ -70,6 +106,7 @@ class Featex():
         else:        
             reducefeature2 = F.interpolate(reducefeature2, size=(self.feature1.size()[2], self.feature1.size()[3]), mode='bilinear', align_corners=True)
             reducefeature3 = F.interpolate(reducefeature3, size=(self.feature1.size()[2], self.feature1.size()[3]), mode='bilinear', align_corners=True)
+
         return torch.cat((reducefeature1, reducefeature2,reducefeature3), dim=1)
 
 def runpca(x,components,U):
@@ -196,6 +233,7 @@ def model_eval(model,layer1,layer2,layer3,file_dir,use_cuda):
             I_feat=featex(T_image,'big')
             SI_feat=featex(T_search_image,'big')
             resize_bbox=[i/b for i in template_bbox]
+
         print(' ')
         print('Feature extraction done.')
         pad1=[int(round(t)) for t in (template_bbox[3],template_bbox[2])]
@@ -236,7 +274,7 @@ args=parser.parse_args()
 dataset=args.Dataset
 file_dir = dataset+'data'
 gt = sorted([ os.path.join(file_dir, i) for i in os.listdir(file_dir)  if '.txt' in i ])
-img_path = sorted([ os.path.join(file_dir, i) for i in os.listdir(file_dir) if '.png' in i ] )    
+img_path = sorted([ os.path.join(file_dir, i) for i in os.listdir(file_dir) if '.jpg' in i ] )    
 model=models.vgg19(pretrained=False)
 checkpoint=torch.load('model/model_D.pth.tar', map_location=lambda storage, loc: storage)
 state_dict =checkpoint['state_dict']
