@@ -1,3 +1,4 @@
+import cv2
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -75,6 +76,9 @@ def preprocess(image):
     out=torch.cat((imageon,imageoff),1)
     return out
     '''
+
+    
+
     return X
 
 def conv2_same(Input, weight,num=1):

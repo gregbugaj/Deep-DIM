@@ -35,7 +35,7 @@ def all_sample_iou( gt_list,pd_list):
 
 
 def plot_success_curve( iou_score,method,title='' ):
-    imageroot='results'+'/{m}/{n}.png'
+    imageroot='results'+'/{m}/{n}-{auc}.png'
     thres, success_rate = score2curve( iou_score, thres_delta = 0.05 )
     auc_ = np.mean( success_rate[:-1] ) # this is same auc protocol as used in previous template matching papers #auc_ = auc( thres, success_rate ) # this is the actual auc
     plt.figure()
@@ -45,5 +45,5 @@ def plot_success_curve( iou_score,method,title='' ):
     plt.ylim(0, 1)
     plt.title(title + 'auc={}'.format(auc_))
     plt.plot( thres, success_rate )
-    plt.savefig(imageroot.format(n='AUC',m=method))
+    plt.savefig(imageroot.format(n='AUC',m=method, auc=auc_))
     plt.show()
