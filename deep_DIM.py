@@ -335,11 +335,12 @@ else:
     if dataset=='BBS':
         layers=(2,19,25)
     elif dataset=='RMS':
-        layers=(2,14,16) # .675/
-        # layers=(5,10,12)
-        layers=(5,12,14)
-        layers=(2,19,25)
-        layers=(0,16,21)
+        layers=(0 ,5, 7) # .85/
+        # layers=(2,14,16) # .675/
+        # # layers=(5,10,12)
+        # layers=(5,12,14)
+        # layers=(2,19,25)
+        # layers=(0,16,21)
     else:
         layers=(0,16,21)
         
