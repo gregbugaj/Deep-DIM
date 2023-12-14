@@ -9,7 +9,3 @@
 
 from .config import add_vit_config
 from .backbone import build_vit_fpn_backbone
-from .dataset_mapper import DetrDatasetMapper
-from .mycheckpointer import MyDetectionCheckpointer
-from .funsd_evaluation import FUNSDEvaluator
-from .mytrainer import MyTrainer
