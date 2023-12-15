@@ -2,7 +2,7 @@ _BASE_: "./Base-RCNN-FPN.yaml"
 MODEL:
   PIXEL_MEAN: [ 127.5, 127.5, 127.5 ]
   PIXEL_STD: [ 127.5, 127.5, 127.5 ]
-  WEIGHTS: "~/model_zoo/unilm/dit/text_detection/td-syn_dit-b_mrcnn.pth"
+  WEIGHTS: "/mnt/data/marie-ai/model_zoo/unilm/dit/dit_base/dit-base-224-p16-500k-62d53a.zip"
   VIT:
     NAME: "dit_base_patch16"
   ANCHOR_GENERATOR:

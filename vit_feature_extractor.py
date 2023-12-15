@@ -1,33 +1,21 @@
 # MPViT : Multi-Path Vision Transformer for Dense Prediction
 # https://arxiv.org/pdf/2112.11010.pdf
-
+# https://medium.com/@hirotoschwert/digging-into-detectron-2-part-2-dd6e8b0526e
 
 import argparse
-import glob
 import logging
 import os
-import sys
 from typing import List, Dict
 
-import torch
 import cv2
-
 import numpy as np
-import torch.nn as nn
-import torch.nn.functional as F
-from PIL import Image
-from detectron2.structures import ImageList
-from torch.nn import Module
-from ditod import add_vit_config
-from detectron2.modeling.backbone import build_backbone
-from detectron2.utils.visualizer import ColorMode, Visualizer
-
+import torch
+from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
 from detectron2.modeling import build_model
+from detectron2.structures import ImageList
 
 from ditod import add_vit_config
-
-import argparse
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +49,7 @@ def build_model_from_config(cfg):
     Overwrite it if you'd like a different model.    
     """
     model = build_model(cfg)
+    model.eval()
     logger.info("Model:\n{}".format(model))
 
     return model
@@ -80,8 +69,8 @@ def preprocess_image(batched_inputs: List[torch.Tensor], pixel_mean: torch.Tenso
     images = ImageList.from_tensors(
         images,
         32,
-        padding_constraints={'square_size': 0},
     )
+
     return images
 
 
@@ -95,13 +84,13 @@ def extract_vit_features(backbone_cfg: Dict, image_path: str):
     print("backbone.size_divisibility : ", backbone.size_divisibility)
     print("backbone.padding_constraints : ", backbone.padding_constraints)
 
-    backbone.eval()
-    img = Image.open(os.path.expanduser(image_path)).convert('RGB')
+    if not os.path.exists(image_path):
+        raise Exception("Image path does not exist : ", image_path)
 
+    img = cv2.imread(os.path.expanduser(image_path))
+    # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
     # Convert to N, C, H, W format
-    img = np.array(img)
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     batched_inputs = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).float()
     print(batched_inputs.shape)
 
@@ -110,9 +99,42 @@ def extract_vit_features(backbone_cfg: Dict, image_path: str):
     print(images.tensor.shape)
 
     # 'p2', 'p3', 'p4', 'p5', 'p6'
-    features = backbone(images.tensor)
-    print(features.keys())
-    print(features)
+    import matplotlib.pyplot as plt
+
+    fig = plt.figure(figsize=(32, 18))
+    # setting values to rows and column variables
+    rows = 2
+    columns = 3
+
+    # original image
+    fig.add_subplot(rows, columns, 1)
+    plt.imshow(images.tensor[0].permute(1, 2, 0).cpu().numpy())
+    plt.axis('on')
+    plt.title("input image")
+
+    with torch.no_grad():
+        features = backbone(images.tensor)
+        print(features.keys())
+        idx = 0
+        for k, v in features.items():
+            # feature format is N, C, H, W where C is the number of channels (feature maps) = 256
+            print(f"output[{k}].shape->", v.shape)
+            v_ = v[:, 0].cpu().numpy()
+            v_ = (v_ - v_.min()) / (v_.max() - v_.min())
+            v_ = (v_ * 255).astype(np.uint8)
+            # v_ = (v_ / 16 + 0.5) * 255
+            v_ = np.asarray(v_.clip(0, 255), dtype=np.uint8).transpose((1, 2, 0))
+            cv2.imwrite(k + '.png', v_)
+
+            fig.add_subplot(rows, columns, idx + 2)
+            plt.imshow(v_, cmap='jet')
+            plt.axis('on')
+            plt.title(k)
+            idx += 1
+
+    print(f"Saving  feature maps...")
+    plt.savefig(f"features.png")
+    plt.close()
 
 
 def main(args):
@@ -120,19 +142,19 @@ def main(args):
 
     # Step 1: instantiate config
     cfg = setup_cfg(args)
-    print(cfg)
-    backbone = build_backbone(cfg)
 
     model = build_model_from_config(cfg)
+    DetectionCheckpointer(model).load(cfg.MODEL.WEIGHTS)
+
     if args.image_path is None:
         print("No image path provided")
         return
 
     args.image_path = os.path.expanduser(args.image_path)
-    # extract_vit_features(model, args.image_path)
-
+    print(model)
+    print(model.backbone)
     backbone_cfg = {
-        "backbone": backbone,
+        "backbone": model.backbone,
         "input_format": cfg.INPUT.FORMAT,
         "pixel_mean": cfg.MODEL.PIXEL_MEAN,
         "pixel_std": cfg.MODEL.PIXEL_STD,
@@ -176,6 +198,12 @@ def get_parser():
 
 
 if __name__ == "__main__":
+    # set seed for reproducibility
+    torch.manual_seed(42)
+    np.random.seed(42)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
     parser = get_parser()
     args = parser.parse_args()
     main(args)
