@@ -1,0 +1,37 @@
+# Install the pre-commit hooks below with
+# 'pre-commit install'
+
+# Auto-update the version of the hooks with
+# 'pre-commit autoupdate'
+
+# Run the hooks on all files with
+# 'pre-commit run --all'
+
+repos:
+  - repo: https://github.com/pycqa/flake8
+    rev: "5.0.4"
+    hooks:
+    -   id: flake8
+        exclude: ^(.git|__pycache__|hubble/resources/|marie/storage|marie/core|tests|marie/models|marie/utils/patches.py|marie/boxes/dit|marie/models/unilm|.git|__pycache__|old|build|dist|tests|marie/resources/|marie/resources/|marie/proto/docarray_v1|marie/proto/docarray_v2)
+        args:
+          - --max-complexity=10
+          - --max-line-length=127
+          - --select=E9,F63,F7,F82
+
+  - repo: https://github.com/psf/black
+    rev: 22.3.0
+    hooks:
+    - id: black
+      types: [python]
+      exclude: ^(ditod/)
+      args:
+        - -S
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.12.0
+    hooks:
+      - id: isort
+        exclude: ^(ditod/)
+        args: ["--profile", "black"]
+
+

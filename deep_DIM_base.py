@@ -1,21 +1,31 @@
 from __future__ import division, print_function
 
 import argparse
+import copy
 import os
+from collections import OrderedDict
 
+import cv2
 import matplotlib
 import matplotlib.pyplot as plt
-from torchvision import transforms
+import numpy as np
+import progressbar
+import torch
+import torch.nn.functional as F
+import torchvision
+from torchvision import models, transforms
 
 from DIM import *
 from utils import all_sample_iou, plot_success_curve
-from vit_feature_extractor import build_backbone_config, extract_vit_features
 
 matplotlib.use('Agg')
 
 
+# https://debuggercafe.com/visualizing-filters-and-feature-maps-in-convolutional-neural-networks-using-pytorch/
+
+
 class Featex:
-    def __init__(self, backbone_cfg, use_cuda, layer1, layer2, layer3):
+    def __init__(self, model, use_cuda, layer1, layer2, layer3):
         self.use_cuda = use_cuda
         self.feature1 = None
         self.feature2 = None
@@ -23,11 +33,18 @@ class Featex:
         self.U1 = None
         self.U2 = None
         self.U3 = None
-
-        self.backbone_cfg = backbone_cfg
-        self.layer1 = layer1
-        self.layer2 = layer2
-        self.layer3 = layer3
+        self.model = copy.deepcopy(model.eval())
+        self.model = self.model[:36]
+        for param in self.model.parameters():
+            param.requires_grad = False
+        if self.use_cuda:
+            self.model = self.model.cuda()
+        self.model[layer1].register_forward_hook(self.save_feature1)
+        self.model[layer1 + 1] = torch.nn.ReLU(inplace=False)
+        self.model[layer2].register_forward_hook(self.save_feature2)
+        self.model[layer2 + 1] = torch.nn.ReLU(inplace=False)
+        self.model[layer3].register_forward_hook(self.save_feature3)
+        self.model[layer3 + 1] = torch.nn.ReLU(inplace=False)
 
     def save_feature1(self, module, input, output):
         self.feature1 = output.detach()
@@ -44,15 +61,30 @@ class Featex:
     def visualize_feature(self, feature, name):
         import matplotlib.pyplot as plt
 
+        feature = feature.cpu().numpy()
+
+        # feature = (feature - feature.min()) / (feature.max() - feature.min())
+        # feature = (feature * 255).astype(np.uint8)
+
+        layer_viz = feature[0, :, :, :]
+        plt.figure(figsize=(30, 30))
+
+        for i, filter in enumerate(layer_viz):
+            if i == 16:  # we will visualize only 8x8 blocks from each layer
+                break
+            plt.subplot(4, 4, i + 1)
+            plt.imshow(filter, cmap='jet')
+            plt.axis("on")
+
+        print(f"Saving layer {name} feature maps...")
+        plt.savefig(f"./results/layer_{name}_{i}.png")
+        plt.close()
+
     def __call__(self, input, mode='normal'):
         channel = 64
         if self.use_cuda:
             input = input.cuda()
-
-        features = extract_vit_features(self.backbone_cfg, input)
-        self.feature1 = features.get(f'p{self.layer1}')
-        self.feature2 = features.get(f'p{self.layer2}')
-        self.feature3 = features.get(f'p{self.layer3}')
+        _ = self.model(input)
 
         if channel < self.feature1.shape[1]:
             reducefeature1, self.U1 = runpca(self.feature1, channel, self.U1)
@@ -67,7 +99,7 @@ class Featex:
         else:
             reducefeature3 = self.feature3
 
-        if False: #mode == 'big':
+        if mode == 'big':
             # resize feature1 to the same size of feature2
             reducefeature1 = F.interpolate(
                 reducefeature1,
@@ -81,19 +113,19 @@ class Featex:
                 mode='bilinear',
                 align_corners=True,
             )
-
-        reducefeature2 = F.interpolate(
-            reducefeature2,
-            size=(self.feature1.size()[2], self.feature1.size()[3]),
-            mode='bilinear',
-            align_corners=True,
-        )
-        reducefeature3 = F.interpolate(
-            reducefeature3,
-            size=(self.feature1.size()[2], self.feature1.size()[3]),
-            mode='bilinear',
-            align_corners=True,
-        )
+        else:
+            reducefeature2 = F.interpolate(
+                reducefeature2,
+                size=(self.feature1.size()[2], self.feature1.size()[3]),
+                mode='bilinear',
+                align_corners=True,
+            )
+            reducefeature3 = F.interpolate(
+                reducefeature3,
+                size=(self.feature1.size()[2], self.feature1.size()[3]),
+                mode='bilinear',
+                align_corners=True,
+            )
 
         return torch.cat((reducefeature1, reducefeature2, reducefeature3), dim=1)
 
@@ -107,13 +139,14 @@ def runpca(x, components, U):
         Sigma = np.dot(np.transpose(X_norm), X_norm) / raw.shape[0]
         U, S, V = np.linalg.svd(Sigma)
     Z = projectData(X_norm, U, components)
-    return (
+    val =(
         torch.tensor(Z.reshape((shape[0], shape[1], components)))
         .permute(2, 0, 1)
         .unsqueeze(0)
         .cuda(),
         U,
     )
+    return val
 
 
 def featureNormalize(X):
@@ -160,8 +193,8 @@ def apply_DIM(I_row, SI_row, template_bbox, pad, pad1, image, numaddtemplates):
     print('Numtemplates=', len(templates))
     print('Preprocess done,start matching...')
     similarity = DIM_matching(SI, templates, 10)[
-                 pad[0]: pad[0] + I.shape[2], pad[1]: pad[1] + I.shape[3]
-                 ]
+        pad[0] : pad[0] + I.shape[2], pad[1] : pad[1] + I.shape[3]
+    ]
     # post processing
     similarity = cv2.resize(similarity, (image.shape[1], image.shape[0]))
     scale = 0.025
@@ -181,16 +214,56 @@ def apply_DIM(I_row, SI_row, template_bbox, pad, pad1, image, numaddtemplates):
     return similarity
 
 
-def model_eval(backbone_cfg, layer1, layer2, layer3, file_dir, use_cuda):
+def apply_lbp(image):
+    return image
+
+    from skimage.feature import local_binary_pattern
+
+    print('Applying LBP :', image.shape)
+    sharp = unsharp_mask(image, kernel_size=(0, 0), sigma=10)
+
+    cv2.imwrite('sharp.png', sharp)
+    return sharp
+
+    lbp = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    radius = 2
+    n_points = 8 * radius
+
+    lbp = local_binary_pattern(lbp, n_points, radius, method="uniform")
+    lbp = (lbp).astype("uint8")
+
+    lbp = cv2.merge([lbp] * 3)
+    cv2.imwrite('lbp.png', lbp)
+
+    return lbp
+
+
+def unsharp_mask(image, kernel_size=(5, 5), sigma=1.0, amount=1.0, threshold=0):
+    """Return a sharpened version of the image, using an unsharp mask."""
+    # blurred = cv2.GaussianBlur(image, kernel_size, sigma)
+    image = cv2.addWeighted(image, 4, cv2.GaussianBlur(image, (0, 0), sigma), -4, 128)
+    return image
+
+    sharpened = float(amount + 1) * image - float(amount) * blurred
+    sharpened = np.maximum(sharpened, np.zeros(sharpened.shape))
+    sharpened = np.minimum(sharpened, 255 * np.ones(sharpened.shape))
+    sharpened = sharpened.round().astype(np.uint8)
+    if threshold > 0:
+        low_contrast_mask = np.absolute(image - blurred) < threshold
+        np.copyto(sharpened, image, where=low_contrast_mask)
+    return sharpened
+
+
+def model_eval(model, layer1, layer2, layer3, file_dir, use_cuda):
     if not os.path.exists(
-            'results/'
-            + file_dir
-            + '/'
-            + str(layer1)
-            + '_'
-            + str(layer2)
-            + '_'
-            + str(layer3)
+        'results/'
+        + file_dir
+        + '/'
+        + str(layer1)
+        + '_'
+        + str(layer2)
+        + '_'
+        + str(layer3)
     ):
         os.makedirs(
             'results/'
@@ -202,8 +275,7 @@ def model_eval(backbone_cfg, layer1, layer2, layer3, file_dir, use_cuda):
             + '_'
             + str(layer3)
         )
-    featex = Featex(backbone_cfg, use_cuda, layer1, layer2, layer3)
-
+    featex = Featex(model, use_cuda, layer1, layer2, layer3)
     gt_list, pd_list = [], []
     num_samples = len(img_path) // 2
 
@@ -228,9 +300,9 @@ def model_eval(backbone_cfg, layer1, layer2, layer3, file_dir, use_cuda):
         image_gt = read_gt(gt[2 * idx + 1])
         root = 'results/' + file_dir + '/{m}/{n}.txt'
         if os.path.exists(
-                root.format(
-                    n=idx + 1, m=str(layer1) + ':' + str(layer2) + ':' + str(layer3)
-                )
+            root.format(
+                n=idx + 1, m=str(layer1) + ':' + str(layer2) + ':' + str(layer3)
+            )
         ):
             f = open(
                 root.format(
@@ -252,13 +324,12 @@ def model_eval(backbone_cfg, layer1, layer2, layer3, file_dir, use_cuda):
         image_transform = transforms.Compose(
             [
                 transforms.ToTensor(),
-                # transforms.Normalize(
-                #     mean=[0.127, 0.127, 0.127],
-                #     std=[0.127, 0.127, 0.127],
-                # ),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225],
+                ),
             ]
         )
-
         T_image = image_transform(template_raw.copy()).unsqueeze(0)
         T_search_image = image_transform(image.copy()).unsqueeze(0)
 
@@ -351,83 +422,62 @@ def model_eval(backbone_cfg, layer1, layer2, layer3, file_dir, use_cuda):
     return (gt_list, pd_list)
 
 
-def get_parser():
-    parser = argparse.ArgumentParser(description="DIT Feature Extractor")
-
-    parser.add_argument(
-        '--Dataset', default='BBS', help='specific a dataset to evaluate,BBS or KTM.'
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    '--Dataset', default='BBS', help='specific a dataset to evaluate,BBS or KTM.'
+)
+parser.add_argument(
+    '--Mode', default='Best', help='specific a mode to run,Best or All.'
+)
+args = parser.parse_args()
+dataset = args.Dataset
+file_dir = dataset + 'data'
+gt = sorted([os.path.join(file_dir, i) for i in os.listdir(file_dir) if '.txt' in i])
+img_path = sorted(
+    [os.path.join(file_dir, i) for i in os.listdir(file_dir) if '.png' in i]
+)
+model = models.vgg19(weights=models.vgg.VGG19_Weights.IMAGENET1K_V1)
+if False:
+    checkpoint = torch.load(
+        'model/model_D.pth.tar', map_location=lambda storage, loc: storage
     )
-    parser.add_argument(
-        '--Mode', default='Best', help='specific a mode to run,Best or All.'
-    )
+    state_dict = checkpoint['state_dict']
+    new_state_dict = OrderedDict()
+    for k, v in state_dict.items():
+        name = k[7:]  # remove 'module.' of dataparallel
+        new_state_dict[name] = v
+    model.load_state_dict(new_state_dict)
+model = model.features
 
-    parser.add_argument(
-        "--config-file",
-        default="configs/mask_rcnn_dit_base.yaml",
-        metavar="FILE",
-        help="path to config file",
-    )
-    parser.add_argument(
-        "--opts",
-        help="Modify config options using the command-line 'KEY VALUE' pairs",
-        default=[],
-        nargs=argparse.REMAINDER,
-    )
+print(gt)
+print(img_path)
 
-    return parser
-
-
-if __name__ == '__main__':
-    parser = get_parser()
-    args = parser.parse_args()
-
-    dataset = args.Dataset
-    file_dir = dataset + 'data'
-    gt = sorted(
-        [os.path.join(file_dir, i) for i in os.listdir(file_dir) if '.txt' in i]
-    )
-    img_path = sorted(
-        [os.path.join(file_dir, i) for i in os.listdir(file_dir) if '.png' in i]
-    )
-
-    backbone_cfg = build_backbone_config(args)
-    print(img_path)
-
-    if args.Mode == 'All':
-        layers = (2, 3, 4, 5, 6)
+if args.Mode == 'All':
+    # There are 16 layers with learnable weights: 13 convolutional layers, and 3 fully connected layers.
+    layers = (0, 2, 5, 7, 10, 12, 14, 16, 19, 21, 23, 25, 28, 30, 32, 34)
+else:
+    if dataset == 'BBS':
+        layers = (2, 19, 25)
+    elif dataset == 'RMS':
+        layers = (0, 5, 7)  # .85/
     else:
-        if dataset == 'BBS':
-            layers = (2, 3, 4)
-        elif dataset == 'RMS':
-            layers = (2, 3, 4)
-        else:
-            layers = (2, 3, 4)
+        layers = (0, 16, 21)
 
-    print(args.Dataset, args.Mode, layers)
+print(args.Dataset, args.Mode, layers)
 
-    for i in range(len(layers)):
-        for j in range(len(layers)):
-            if i >= j:
+for i in range(len(layers)):
+    for j in range(len(layers)):
+        if i >= j:
+            continue
+        for k in range(len(layers)):
+            if j >= k:
                 continue
-            for k in range(len(layers)):
-                if j >= k:
-                    continue
-                layer1 = layers[i]
-                layer2 = layers[j]
-                layer3 = layers[k]
-
-                gt_list, pd_list = model_eval(
-                    backbone_cfg, layer1, layer2, layer3, file_dir, True
-                )
-
-                iou_score = all_sample_iou(gt_list, pd_list)
-                plot_success_curve(
-                    iou_score,
-                    file_dir
-                    + '/'
-                    + str(layer1)
-                    + '_'
-                    + str(layer2)
-                    + '_'
-                    + str(layer3),
-                )
+            layer1 = layers[i]
+            layer2 = layers[j]
+            layer3 = layers[k]
+            gt_list, pd_list = model_eval(model, layer1, layer2, layer3, file_dir, True)
+            iou_score = all_sample_iou(gt_list, pd_list)
+            plot_success_curve(
+                iou_score,
+                file_dir + '/' + str(layer1) + '_' + str(layer2) + '_' + str(layer3),
+            )

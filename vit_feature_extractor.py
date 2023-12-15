@@ -5,9 +5,10 @@
 import argparse
 import logging
 import os
-from typing import List, Dict
+from typing import Dict, List, Union
 
 import cv2
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from detectron2.checkpoint import DetectionCheckpointer
@@ -46,7 +47,7 @@ def build_model_from_config(cfg):
         torch.nn.Module:
 
     It now calls :func:`detectron2.modeling.build_model`.
-    Overwrite it if you'd like a different model.    
+    Overwrite it if you'd like a different model.
     """
     model = build_model(cfg)
     model.eval()
@@ -55,7 +56,11 @@ def build_model_from_config(cfg):
     return model
 
 
-def preprocess_image(batched_inputs: List[torch.Tensor], pixel_mean: torch.Tensor, pixel_std: torch.Tensor):
+def preprocess_image(
+        batched_inputs: List[torch.Tensor],
+        pixel_mean: torch.Tensor,
+        pixel_std: torch.Tensor,
+):
     """
     Normalize, pad and batch the input images.
     """
@@ -65,7 +70,7 @@ def preprocess_image(batched_inputs: List[torch.Tensor], pixel_mean: torch.Tenso
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     device = 'cpu'
     images = [x.to(device) for x in batched_inputs]
-    images = [(x - pixel_mean) / pixel_std for x in images]
+    # images = [(x - pixel_mean) / pixel_std for x in images]
     images = ImageList.from_tensors(
         images,
         32,
@@ -74,7 +79,7 @@ def preprocess_image(batched_inputs: List[torch.Tensor], pixel_mean: torch.Tenso
     return images
 
 
-def extract_vit_features(backbone_cfg: Dict, image_path: str):
+def extract_vit_features(backbone_cfg: Dict, img: Union[torch.Tensor, np.ndarray]):
     backbone = backbone_cfg["backbone"]
     pixel_mean = backbone_cfg["pixel_mean"]
     pixel_std = backbone_cfg["pixel_std"]
@@ -84,23 +89,31 @@ def extract_vit_features(backbone_cfg: Dict, image_path: str):
     print("backbone.size_divisibility : ", backbone.size_divisibility)
     print("backbone.padding_constraints : ", backbone.padding_constraints)
 
-    if not os.path.exists(image_path):
-        raise Exception("Image path does not exist : ", image_path)
-
-    img = cv2.imread(os.path.expanduser(image_path))
     # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-    # Convert to N, C, H, W format
-    batched_inputs = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).float()
-    print(batched_inputs.shape)
+    if isinstance(img, np.ndarray):
+        # Convert to N, C, H, W format
+        batched_inputs = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).float()
+    elif isinstance(img, torch.Tensor):
+        # check if the image is in N, C, H, W format
+        if len(img.shape) == 3:  # C, H, W
+            batched_inputs = img.unsqueeze(0)
+        elif len(img.shape) == 4:  # N, C, H, W
+            batched_inputs = img
+        else:
+            raise Exception("Unsupported image shape")
+    else:
+        raise Exception("Unsupported image type")
 
-    images = preprocess_image(batched_inputs, torch.tensor(pixel_mean).view(-1, 1, 1),
-                              torch.tensor(pixel_std).view(-1, 1, 1))
+    print(batched_inputs.shape)
+    images = preprocess_image(
+        batched_inputs,
+        torch.tensor(pixel_mean).view(-1, 1, 1),
+        torch.tensor(pixel_std).view(-1, 1, 1),
+    )
     print(images.tensor.shape)
 
     # 'p2', 'p3', 'p4', 'p5', 'p6'
-    import matplotlib.pyplot as plt
-
     fig = plt.figure(figsize=(32, 18))
     # setting values to rows and column variables
     rows = 2
@@ -119,10 +132,9 @@ def extract_vit_features(backbone_cfg: Dict, image_path: str):
         for k, v in features.items():
             # feature format is N, C, H, W where C is the number of channels (feature maps) = 256
             print(f"output[{k}].shape->", v.shape)
-            v_ = v[:, 0].cpu().numpy()
+            v_ = v[:, 255].cpu().numpy()
             v_ = (v_ - v_.min()) / (v_.max() - v_.min())
             v_ = (v_ * 255).astype(np.uint8)
-            # v_ = (v_ / 16 + 0.5) * 255
             v_ = np.asarray(v_.clip(0, 255), dtype=np.uint8).transpose((1, 2, 0))
             cv2.imwrite(k + '.png', v_)
 
@@ -136,32 +148,39 @@ def extract_vit_features(backbone_cfg: Dict, image_path: str):
     plt.savefig(f"features.png")
     plt.close()
 
+    return features
 
-def main(args):
+
+def main(args: argparse.Namespace):
     print("Extracting features from image")
 
-    # Step 1: instantiate config
-    cfg = setup_cfg(args)
+    if args.image_path is None:
+        raise Exception("No image path provided")
 
+    image_path = os.path.expanduser(args.image_path)
+    if not os.path.exists(image_path):
+        raise Exception("Image path does not exist : ", image_path)
+
+    img = cv2.imread(os.path.expanduser(image_path))
+    backbone_cfg = build_backbone_config(args)
+
+    return extract_vit_features(backbone_cfg, img)
+
+
+def build_backbone_config(args: argparse.Namespace) -> Dict[str, object]:
+    cfg = setup_cfg(args)
     model = build_model_from_config(cfg)
     DetectionCheckpointer(model).load(cfg.MODEL.WEIGHTS)
 
-    if args.image_path is None:
-        print("No image path provided")
-        return
-
-    args.image_path = os.path.expanduser(args.image_path)
+    print("Model loaded from ", cfg.MODEL.WEIGHTS)
     print(model)
-    print(model.backbone)
     backbone_cfg = {
         "backbone": model.backbone,
         "input_format": cfg.INPUT.FORMAT,
         "pixel_mean": cfg.MODEL.PIXEL_MEAN,
         "pixel_std": cfg.MODEL.PIXEL_STD,
     }
-
-    print(backbone_cfg)
-    extract_vit_features(backbone_cfg, args.image_path)
+    return backbone_cfg
 
 
 def get_parser():

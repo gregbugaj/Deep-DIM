@@ -35,3 +35,9 @@ python deep_DIM.py --Dataset BBS --Mode All
 DIM is a recent state-of-the-art template matching method using the mechanism explaining away. An illustration of explaining away can be found below. Red rectangle area in the left image (template image) is the template for matching, and four same size green rectangle areas are the additional templates. These templates compete with each other to be matched to the search image (Right). To be specific, only one template is supported to be the best matching one at every location whereas the similarities of others are suppressed or explained away. The corresponding matching results are shown in the right. The details of DIM can be found [here](https://nms.kcl.ac.uk/michael.spratling/Doc/dim_patchmatching.pdf).
 
 <img src="https://raw.githubusercontent.com/iminfine/Deep-DIM/master/figure/DIM.png" width="800"/> 
+
+
+# Resources
+https://medium.com/@abhi1thakur/fine-tuning-for-image-classification-using-pytorch-81e77d125646
+https://rumn.medium.com/part-1-ultimate-guide-to-fine-tuning-in-pytorch-pre-trained-model-and-its-configuration-8990194b71e
+
