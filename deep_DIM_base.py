@@ -61,6 +61,7 @@ class Featex:
     def visualize_feature(self, feature, name):
         import matplotlib.pyplot as plt
 
+        return
         feature = feature.cpu().numpy()
 
         # feature = (feature - feature.min()) / (feature.max() - feature.min())
@@ -139,7 +140,7 @@ def runpca(x, components, U):
         Sigma = np.dot(np.transpose(X_norm), X_norm) / raw.shape[0]
         U, S, V = np.linalg.svd(Sigma)
     Z = projectData(X_norm, U, components)
-    val =(
+    val = (
         torch.tensor(Z.reshape((shape[0], shape[1], components)))
         .permute(2, 0, 1)
         .unsqueeze(0)
@@ -377,7 +378,7 @@ def model_eval(model, layer1, layer2, layer3, file_dir, use_cuda):
                 'symmetric',
             )
         )
-        similarity = apply_DIM(I_feat, SI_pad, resize_bbox, pad2, pad1, image, 5)
+        similarity = apply_DIM(I_feat, SI_pad, resize_bbox, pad2, pad1, image, 10)
 
         ptx, pty = np.where(similarity == np.amax(similarity))
         image_pd = tuple(
@@ -447,6 +448,7 @@ if False:
         name = k[7:]  # remove 'module.' of dataparallel
         new_state_dict[name] = v
     model.load_state_dict(new_state_dict)
+
 model = model.features
 
 print(gt)

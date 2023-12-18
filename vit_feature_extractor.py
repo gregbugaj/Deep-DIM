@@ -57,9 +57,9 @@ def build_model_from_config(cfg):
 
 
 def preprocess_image(
-        batched_inputs: List[torch.Tensor],
-        pixel_mean: torch.Tensor,
-        pixel_std: torch.Tensor,
+    batched_inputs: List[torch.Tensor],
+    pixel_mean: torch.Tensor,
+    pixel_std: torch.Tensor,
 ):
     """
     Normalize, pad and batch the input images.

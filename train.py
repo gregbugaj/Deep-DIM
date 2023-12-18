@@ -1,26 +1,34 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torchvision import datasets, transforms, models
+from torchvision import datasets, models, transforms
 
 # Define transformation for the CIFAR-10 dataset
-transform = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-])
+transform = transforms.Compose(
+    [
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+    ]
+)
 
 # Load CIFAR-10 dataset
-train_dataset = datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
-test_dataset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
+train_dataset = datasets.CIFAR10(
+    root='./data', train=True, download=True, transform=transform
+)
+test_dataset = datasets.CIFAR10(
+    root='./data', train=False, download=True, transform=transform
+)
 
 # Define transformation for the bitonal images
-transform = transforms.Compose([
-    transforms.Grayscale(num_output_channels=3),  # Convert to 3 channels
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-])
+transform = transforms.Compose(
+    [
+        transforms.Grayscale(num_output_channels=3),  # Convert to 3 channels
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+    ]
+)
 
 # Load your bitonal dataset (adjust the path accordingly)
 # Note: Ensure that your dataset has the appropriate folder structure for PyTorch datasets
@@ -29,8 +37,12 @@ test_dataset = datasets.ImageFolder(root='/path/to/bitonal/test', transform=tran
 
 
 # Create data loaders
-train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=32, shuffle=True)
-test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=32, shuffle=False)
+train_loader = torch.utils.data.DataLoader(
+    dataset=train_dataset, batch_size=32, shuffle=True
+)
+test_loader = torch.utils.data.DataLoader(
+    dataset=test_dataset, batch_size=32, shuffle=False
+)
 
 # Load pre-trained ResNet-50 model
 model = models.resnet50(pretrained=True)

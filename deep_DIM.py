@@ -67,7 +67,7 @@ class Featex:
         else:
             reducefeature3 = self.feature3
 
-        if False: #mode == 'big':
+        if False:  # mode == 'big':
             # resize feature1 to the same size of feature2
             reducefeature1 = F.interpolate(
                 reducefeature1,
@@ -160,8 +160,8 @@ def apply_DIM(I_row, SI_row, template_bbox, pad, pad1, image, numaddtemplates):
     print('Numtemplates=', len(templates))
     print('Preprocess done,start matching...')
     similarity = DIM_matching(SI, templates, 10)[
-                 pad[0]: pad[0] + I.shape[2], pad[1]: pad[1] + I.shape[3]
-                 ]
+        pad[0] : pad[0] + I.shape[2], pad[1] : pad[1] + I.shape[3]
+    ]
     # post processing
     similarity = cv2.resize(similarity, (image.shape[1], image.shape[0]))
     scale = 0.025
@@ -183,14 +183,14 @@ def apply_DIM(I_row, SI_row, template_bbox, pad, pad1, image, numaddtemplates):
 
 def model_eval(backbone_cfg, layer1, layer2, layer3, file_dir, use_cuda):
     if not os.path.exists(
-            'results/'
-            + file_dir
-            + '/'
-            + str(layer1)
-            + '_'
-            + str(layer2)
-            + '_'
-            + str(layer3)
+        'results/'
+        + file_dir
+        + '/'
+        + str(layer1)
+        + '_'
+        + str(layer2)
+        + '_'
+        + str(layer3)
     ):
         os.makedirs(
             'results/'
@@ -228,9 +228,9 @@ def model_eval(backbone_cfg, layer1, layer2, layer3, file_dir, use_cuda):
         image_gt = read_gt(gt[2 * idx + 1])
         root = 'results/' + file_dir + '/{m}/{n}.txt'
         if os.path.exists(
-                root.format(
-                    n=idx + 1, m=str(layer1) + ':' + str(layer2) + ':' + str(layer3)
-                )
+            root.format(
+                n=idx + 1, m=str(layer1) + ':' + str(layer2) + ':' + str(layer3)
+            )
         ):
             f = open(
                 root.format(

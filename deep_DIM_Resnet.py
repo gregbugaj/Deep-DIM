@@ -16,6 +16,7 @@ import torchvision
 from torchvision import models, transforms
 
 from DIM import *
+from resnet_feature_extractor import build_resnet_model, get_conv_layer_by_idx, extract_resnet_features
 from utils import all_sample_iou, plot_success_curve
 
 matplotlib.use('Agg')
@@ -33,58 +34,21 @@ class Featex:
         self.U1 = None
         self.U2 = None
         self.U3 = None
-        self.model = copy.deepcopy(model.eval())
-        self.model = self.model[:36]
-        for param in self.model.parameters():
-            param.requires_grad = False
+        self.model = model
         if self.use_cuda:
             self.model = self.model.cuda()
-        self.model[layer1].register_forward_hook(self.save_feature1)
-        self.model[layer1 + 1] = torch.nn.ReLU(inplace=False)
-        self.model[layer2].register_forward_hook(self.save_feature2)
-        self.model[layer2 + 1] = torch.nn.ReLU(inplace=False)
-        self.model[layer3].register_forward_hook(self.save_feature3)
-        self.model[layer3 + 1] = torch.nn.ReLU(inplace=False)
-
-    def save_feature1(self, module, input, output):
-        self.feature1 = output.detach()
-        self.visualize_feature(self.feature1, 'feature1')
-
-    def save_feature2(self, module, input, output):
-        self.feature2 = output.detach()
-        self.visualize_feature(self.feature2, 'feature2')
-
-    def save_feature3(self, module, input, output):
-        self.feature3 = output.detach()
-        self.visualize_feature(self.feature3, 'feature3')
-
-    def visualize_feature(self, feature, name):
-        import matplotlib.pyplot as plt
-
-        feature = feature.cpu().numpy()
-
-        # feature = (feature - feature.min()) / (feature.max() - feature.min())
-        # feature = (feature * 255).astype(np.uint8)
-
-        layer_viz = feature[0, :, :, :]
-        plt.figure(figsize=(30, 30))
-
-        for i, filter in enumerate(layer_viz):
-            if i == 16:  # we will visualize only 8x8 blocks from each layer
-                break
-            plt.subplot(4, 4, i + 1)
-            plt.imshow(filter, cmap='jet')
-            plt.axis("on")
-
-        print(f"Saving layer {name} feature maps... ", feature.shape)
-        plt.savefig(f"./results/layer_{name}_{i}.png")
-        plt.close()
+        self.layers = [get_conv_layer_by_idx(self.model, i) for i in (layer1, layer2, layer3)]
 
     def __call__(self, input, mode='normal'):
         channel = 64
         if self.use_cuda:
             input = input.cuda()
-        _ = self.model(input)
+
+        features = extract_resnet_features(self.model, input, self.layers, visualize=False)
+
+        self.feature1 = features[0]
+        self.feature2 = features[1]
+        self.feature3 = features[2]
 
         if channel < self.feature1.shape[1]:
             reducefeature1, self.U1 = runpca(self.feature1, channel, self.U1)
@@ -98,6 +62,10 @@ class Featex:
             reducefeature3, self.U3 = runpca(self.feature3, channel, self.U3)
         else:
             reducefeature3 = self.feature3
+
+        # reducefeature1 = self.feature1
+        # reducefeature2 = self.feature2
+        # reducefeature3 = self.feature3
 
         if mode == 'big':
             # resize feature1 to the same size of feature2
@@ -193,8 +161,8 @@ def apply_DIM(I_row, SI_row, template_bbox, pad, pad1, image, numaddtemplates):
     print('Numtemplates=', len(templates))
     print('Preprocess done,start matching...')
     similarity = DIM_matching(SI, templates, 10)[
-        pad[0] : pad[0] + I.shape[2], pad[1] : pad[1] + I.shape[3]
-    ]
+                 pad[0]: pad[0] + I.shape[2], pad[1]: pad[1] + I.shape[3]
+                 ]
     # post processing
     similarity = cv2.resize(similarity, (image.shape[1], image.shape[0]))
     scale = 0.025
@@ -214,56 +182,16 @@ def apply_DIM(I_row, SI_row, template_bbox, pad, pad1, image, numaddtemplates):
     return similarity
 
 
-def apply_lbp(image):
-    return image
-
-    from skimage.feature import local_binary_pattern
-
-    print('Applying LBP :', image.shape)
-    sharp = unsharp_mask(image, kernel_size=(0, 0), sigma=10)
-
-    cv2.imwrite('sharp.png', sharp)
-    return sharp
-
-    lbp = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    radius = 2
-    n_points = 8 * radius
-
-    lbp = local_binary_pattern(lbp, n_points, radius, method="uniform")
-    lbp = (lbp).astype("uint8")
-
-    lbp = cv2.merge([lbp] * 3)
-    cv2.imwrite('lbp.png', lbp)
-
-    return lbp
-
-
-def unsharp_mask(image, kernel_size=(5, 5), sigma=1.0, amount=1.0, threshold=0):
-    """Return a sharpened version of the image, using an unsharp mask."""
-    # blurred = cv2.GaussianBlur(image, kernel_size, sigma)
-    image = cv2.addWeighted(image, 4, cv2.GaussianBlur(image, (0, 0), sigma), -4, 128)
-    return image
-
-    sharpened = float(amount + 1) * image - float(amount) * blurred
-    sharpened = np.maximum(sharpened, np.zeros(sharpened.shape))
-    sharpened = np.minimum(sharpened, 255 * np.ones(sharpened.shape))
-    sharpened = sharpened.round().astype(np.uint8)
-    if threshold > 0:
-        low_contrast_mask = np.absolute(image - blurred) < threshold
-        np.copyto(sharpened, image, where=low_contrast_mask)
-    return sharpened
-
-
 def model_eval(model, layer1, layer2, layer3, file_dir, use_cuda):
     if not os.path.exists(
-        'results/'
-        + file_dir
-        + '/'
-        + str(layer1)
-        + '_'
-        + str(layer2)
-        + '_'
-        + str(layer3)
+            'results/'
+            + file_dir
+            + '/'
+            + str(layer1)
+            + '_'
+            + str(layer2)
+            + '_'
+            + str(layer3)
     ):
         os.makedirs(
             'results/'
@@ -285,7 +213,6 @@ def model_eval(model, layer1, layer2, layer3, file_dir, use_cuda):
     for idx in range(num_samples):
         # load image and ground truth
         template_raw = cv2.imread(img_path[2 * idx])[..., ::-1]
-        # template_raw = apply_lbp(template_raw)
 
         template_bbox = read_gt(gt[2 * idx])
         x, y, w, h = [int(round(t)) for t in template_bbox]
@@ -293,16 +220,15 @@ def model_eval(model, layer1, layer2, layer3, file_dir, use_cuda):
             template_raw.copy(), (x, y), (x + w, y + h), (0, 255, 0), 2
         )
         image = cv2.imread(img_path[2 * idx + 1])[..., ::-1]
-        # image = apply_lbp(image)
 
         # cv2.imwrite('imageon.png',X[0][0].cpu().numpy()*255)
 
         image_gt = read_gt(gt[2 * idx + 1])
         root = 'results/' + file_dir + '/{m}/{n}.txt'
         if os.path.exists(
-            root.format(
-                n=idx + 1, m=str(layer1) + ':' + str(layer2) + ':' + str(layer3)
-            )
+                root.format(
+                    n=idx + 1, m=str(layer1) + ':' + str(layer2) + ':' + str(layer3)
+                )
         ):
             f = open(
                 root.format(
@@ -324,6 +250,7 @@ def model_eval(model, layer1, layer2, layer3, file_dir, use_cuda):
         image_transform = transforms.Compose(
             [
                 transforms.ToTensor(),
+                # transforms.Resize((224, 224)),
                 transforms.Normalize(
                     mean=[0.485, 0.456, 0.406],
                     std=[0.229, 0.224, 0.225],
@@ -345,6 +272,12 @@ def model_eval(model, layer1, layer2, layer3, file_dir, use_cuda):
             a = 8
         if 27 < layer1 <= 36:
             a = 16
+
+        if 36 < layer1 <= 44:
+            a = 32
+        if 44 < layer1 <= 52:
+            a = 64
+
         if 0 <= layer3 <= 4:
             b = 1
         if 4 < layer3 <= 9:
@@ -355,6 +288,12 @@ def model_eval(model, layer1, layer2, layer3, file_dir, use_cuda):
             b = 8
         if 27 < layer3 <= 36:
             b = 16
+
+        if 36 < layer3 <= 44:
+            b = 32
+        if 44 < layer3 <= 52:
+            b = 64
+
 
         if w * h <= 4000:
             I_feat = featex(T_image)
@@ -437,21 +376,29 @@ img_path = sorted(
     [os.path.join(file_dir, i) for i in os.listdir(file_dir) if '.png' in i]
 )
 
-model = models.vgg19(weights=models.vgg.VGG19_Weights.IMAGENET1K_V1)
-model = model.features
-
+model = build_resnet_model()
 
 print(gt)
 print(img_path)
 
 if args.Mode == 'All':
-    # There are 16 layers with learnable weights: 13 convolutional layers, and 3 fully connected layers.
-    layers = (0, 2, 5, 7, 10, 12, 14, 16, 19, 21, 23, 25, 28, 30, 32, 34)
+    # get all conv layers in resnet50 model
+
+    layers_conv1 = [0, 1, 5, 8, 11, 15, 18, 21, 24, 28, 31, 34, 37, 40, 43, 47, 50] # conv1
+    layers_conv2 = [0, 2, 6, 9, 12, 16, 19, 22, 25, 29, 32, 35, 38, 41, 44, 48, 51] # conv2
+    layers_conv3 = [0, 3, 7, 10, 13, 17, 20, 23, 26, 30, 33, 36, 39, 42, 45, 49, 52]  # conv3
+
+    layers_conv1 = [0, 1, 5, 8, 11, 15, 18, 21, 24]  # conv1
+    layers_conv2 = [0, 2, 6, 9, 12, 16, 19, 22, 25]  # conv2
+    layers_conv3 = [0, 3, 7, 10, 13, 17, 20, 23, 26]  # conv3
+
+    layers = list(set(layers_conv1 + layers_conv2))
+
 else:
     if dataset == 'BBS':
         layers = (2, 19, 25)
     elif dataset == 'RMS':
-        layers = (0, 5, 7)  # .85/
+        layers = (1, 2, 3)  # .85/
     else:
         layers = (0, 16, 21)
 
