@@ -24,7 +24,9 @@ to_tensor = transforms.ToTensor()
 
 def build_resnet_model():
     # Load pre-trained ResNet-50
-    model = models.resnet50(pretrained=True)
+    # resnet34
+    # model = models.resnet50(pretrained=True)
+    model = models.resnet34(pretrained=True)
     # Modify the first convolutional layer to handle dynamic input sizes
     model.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
 
@@ -47,7 +49,7 @@ def dump_model_info(model: nn.Module) -> None:
             print(f'{idx} [{count}] = {name} ')
             count += 1
 
-        if name.find('conv2') > 0:
+        if name.find('conv1') > 0:
             special_layers.append(name)
         idx += 1
 
@@ -210,8 +212,7 @@ def main(args: argparse.Namespace):
                'layer2.3.relu', 'layer3.0.relu', 'layer3.1.relu', 'layer3.2.relu', 'layer3.3.relu', 'layer3.4.relu',
                'layer3.5.relu', 'layer4.0.relu', 'layer4.1.relu', 'layer4.2.relu']
 
-    targets = ['conv1', 'layer1.0.conv1', 'layer1.1.conv1', 'layer1.2.conv1', 'layer2.0.conv1', 'layer2.1.conv1', 'layer2.2.conv1', 'layer2.3.conv1', 'layer3.0.conv1', 'layer3.1.conv1', 'layer3.2.conv1', 'layer3.3.conv1', 'layer3.4.conv1', 'layer3.5.conv1', 'layer4.0.conv1', 'layer4.1.conv1', 'layer4.2.conv1']
-    targets = ['layer1.0.conv2', 'layer1.1.conv2', 'layer1.2.conv2', 'layer2.0.conv2', 'layer2.1.conv2', 'layer2.2.conv2', 'layer2.3.conv2', 'layer3.0.conv2', 'layer3.1.conv2', 'layer3.2.conv2', 'layer3.3.conv2', 'layer3.4.conv2', 'layer3.5.conv2', 'layer4.0.conv2', 'layer4.1.conv2', 'layer4.2.conv2']
+    targets = ['layer1.0.conv1', 'layer1.1.conv1', 'layer1.2.conv1', 'layer2.0.conv1', 'layer2.1.conv1', 'layer2.2.conv1', 'layer2.3.conv1', 'layer3.0.conv1', 'layer3.1.conv1', 'layer3.2.conv1', 'layer3.3.conv1', 'layer3.4.conv1', 'layer3.5.conv1', 'layer4.0.conv1', 'layer4.1.conv1', 'layer4.2.conv1']
     layers = [get_layer_by_name(model, target_name) for target_name in targets]
 
     # layers = get_conv_layers(model)

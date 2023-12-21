@@ -388,9 +388,15 @@ if args.Mode == 'All':
     layers_conv2 = [0, 2, 6, 9, 12, 16, 19, 22, 25, 29, 32, 35, 38, 41, 44, 48, 51] # conv2
     layers_conv3 = [0, 3, 7, 10, 13, 17, 20, 23, 26, 30, 33, 36, 39, 42, 45, 49, 52]  # conv3
 
+    # ResNet-50
     layers_conv1 = [0, 1, 5, 8, 11, 15, 18, 21, 24]  # conv1
     layers_conv2 = [0, 2, 6, 9, 12, 16, 19, 22, 25]  # conv2
     layers_conv3 = [0, 3, 7, 10, 13, 17, 20, 23, 26]  # conv3
+
+    # ResNet-34
+    layers_conv1 = [0, 1, 3, 5, 7, 10, 12, 14, 16, 19, 21, 23, 25, 27, 29, 32, 34]  # conv1
+    layers_conv2 = [0, 2, 4, 6, 8, 11, 13, 15, 17, 20, 22, 24, 26, 28, 30, 33, 35]
+    layers_conv3 = []  # conv3
 
     layers = list(set(layers_conv1 + layers_conv2))
 
@@ -411,12 +417,16 @@ for i in range(len(layers)):
         for k in range(len(layers)):
             if j >= k:
                 continue
-            layer1 = layers[i]
-            layer2 = layers[j]
-            layer3 = layers[k]
-            gt_list, pd_list = model_eval(model, layer1, layer2, layer3, file_dir, True)
-            iou_score = all_sample_iou(gt_list, pd_list)
-            plot_success_curve(
-                iou_score,
-                file_dir + '/' + str(layer1) + '_' + str(layer2) + '_' + str(layer3),
-            )
+            try:
+                layer1 = layers[i]
+                layer2 = layers[j]
+                layer3 = layers[k]
+                gt_list, pd_list = model_eval(model, layer1, layer2, layer3, file_dir, True)
+                iou_score = all_sample_iou(gt_list, pd_list)
+                plot_success_curve(
+                    iou_score,
+                    file_dir + '/' + str(layer1) + '_' + str(layer2) + '_' + str(layer3),
+                )
+            except Exception as e:
+                print(e)
+                continue
