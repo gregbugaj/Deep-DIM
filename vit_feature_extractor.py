@@ -125,6 +125,7 @@ def extract_vit_features(backbone_cfg: Dict, img: Union[torch.Tensor, np.ndarray
     plt.axis('on')
     plt.title("input image")
 
+    backbone = backbone
     with torch.no_grad():
         features = backbone(images.tensor)
         print(features.keys())
@@ -136,7 +137,7 @@ def extract_vit_features(backbone_cfg: Dict, img: Union[torch.Tensor, np.ndarray
             v_ = (v_ - v_.min()) / (v_.max() - v_.min())
             v_ = (v_ * 255).astype(np.uint8)
             v_ = np.asarray(v_.clip(0, 255), dtype=np.uint8).transpose((1, 2, 0))
-            cv2.imwrite(k + '.png', v_)
+            cv2.imwrite(f'/tmp/deep-dim/{k}.png', v_)
 
             fig.add_subplot(rows, columns, idx + 2)
             plt.imshow(v_, cmap='jet')
@@ -145,7 +146,7 @@ def extract_vit_features(backbone_cfg: Dict, img: Union[torch.Tensor, np.ndarray
             idx += 1
 
     print(f"Saving  feature maps...")
-    plt.savefig(f"features.png")
+    plt.savefig(f"/tmp/deep-dim/features.png")
     plt.close()
 
     return features

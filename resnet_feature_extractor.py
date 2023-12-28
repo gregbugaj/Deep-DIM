@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 to_tensor = transforms.ToTensor()
 
+
 # scaler = transforms.Resize((224, 224))
 
 
@@ -27,14 +28,17 @@ def build_resnet_model():
     # resnet34
     # model = models.resnet50(pretrained=True)
     model = models.resnet34(pretrained=True)
+    model = models.resnet18(pretrained=True)
     # Modify the first convolutional layer to handle dynamic input sizes
     model.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
+
+    # remove the last two layers (avgpool and fc)
 
     model.avgpool = nn.Identity()
     model.fc = nn.Identity()
 
-    # for param in model.parameters():
-    #     param.requires_grad = False
+    for param in model.parameters():
+        param.requires_grad = False
 
     model.eval()
     return model
@@ -49,10 +53,9 @@ def dump_model_info(model: nn.Module) -> None:
             print(f'{idx} [{count}] = {name} ')
             count += 1
 
-        if name.find('conv1') > 0:
+        if name.find('conv2') > 0:
             special_layers.append(name)
         idx += 1
-
 
     print('total conv layers: ', count)
     print('special layers: ', special_layers)
@@ -63,6 +66,7 @@ def dump_model_info(model: nn.Module) -> None:
     # Print the names of learnable layers
     for layer in learnable_layers:
         print(layer)
+
 
 def get_conv_layers(model: nn.Module) -> list[Conv2d]:
     count, idx = 0, 0
@@ -204,22 +208,25 @@ def main(args: argparse.Namespace):
     print(model)
 
     dump_model_info(model)
-    targets = ['conv1', 'layer1.0.conv3', 'layer2.0.conv3', 'layer3.0.conv3', 'layer4.0.conv3']
-    targets = ['conv1', 'layer1.2.relu_2']
 
-    targets = ['relu', 'layer1.0.relu', 'layer1.1.relu', 'layer1.2.relu', 'layer2.0.relu', 'layer2.1.relu',
-               'layer2.2.relu',
-               'layer2.3.relu', 'layer3.0.relu', 'layer3.1.relu', 'layer3.2.relu', 'layer3.3.relu', 'layer3.4.relu',
-               'layer3.5.relu', 'layer4.0.relu', 'layer4.1.relu', 'layer4.2.relu']
+    # conv1 ONLY
+    targets_resnet50 = ['layer1.0.conv1', 'layer1.1.conv1', 'layer1.2.conv1', 'layer2.0.conv1', 'layer2.1.conv1',
+                        'layer2.2.conv1', 'layer2.3.conv1', 'layer3.0.conv1', 'layer3.1.conv1', 'layer3.2.conv1',
+                        'layer3.3.conv1', 'layer3.4.conv1', 'layer3.5.conv1', 'layer4.0.conv1', 'layer4.1.conv1',
+                        'layer4.2.conv1']
 
-    targets = ['layer1.0.conv1', 'layer1.1.conv1', 'layer1.2.conv1', 'layer2.0.conv1', 'layer2.1.conv1', 'layer2.2.conv1', 'layer2.3.conv1', 'layer3.0.conv1', 'layer3.1.conv1', 'layer3.2.conv1', 'layer3.3.conv1', 'layer3.4.conv1', 'layer3.5.conv1', 'layer4.0.conv1', 'layer4.1.conv1', 'layer4.2.conv1']
+    targets_resnet18_c1_c2 = ['layer1.0.conv1', 'layer1.0.conv2', 'layer1.1.conv1', 'layer1.1.conv2', 'layer2.0.conv1',
+                        'layer2.0.conv2', 'layer2.1.conv1', 'layer2.1.conv2', 'layer3.0.conv1', 'layer3.0.conv2',
+                        'layer3.1.conv1', 'layer3.1.conv2', 'layer4.0.conv1', 'layer4.0.conv2', 'layer4.1.conv1',
+                        'layer4.1.conv2']
+    targets_resnet18 =  ['layer1.0.conv2', 'layer1.1.conv2', 'layer2.0.conv2', 'layer2.1.conv2', 'layer3.0.conv2', 'layer3.1.conv2', 'layer4.0.conv2', 'layer4.1.conv2']
+    targets = targets_resnet18
+
     layers = [get_layer_by_name(model, target_name) for target_name in targets]
 
-    # layers = get_conv_layers(model)
     layers_idx = [get_conv_layer_index_by_name(model, target_name) for target_name in targets]
     print(layers_idx)
 
-    return
     features = extract_resnet_features(model, img, layers, visualize=True)
 
     return features

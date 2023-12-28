@@ -22,6 +22,9 @@ Hacked together by / Copyright 2020 Ross Wightman
 """
 import warnings
 import math
+
+import cv2
+import numpy as np
 import torch
 from functools import partial
 import torch.nn as nn
@@ -602,6 +605,20 @@ class BEiT(nn.Module):
             if i in self.out_indices:
                 xp = x[:, 1:, :].permute(0, 2, 1).reshape(B, -1, Hp, Wp)
                 features.append(xp.contiguous())
+
+        if False:
+            # save features for visualization
+            for i in range(len(features)):
+                print("feature shape: ", features[i].shape)
+                feature = features[i]
+                feature = feature.detach().cpu().numpy()
+                v = feature
+                v_ = v[:, 255]
+                v_ = (v_ - v_.min()) / (v_.max() - v_.min())
+                v_ = (v_ * 255).astype(np.uint8)
+                v_ = np.asarray(v_.clip(0, 255), dtype=np.uint8).transpose((1, 2, 0))
+                cv2.imwrite(f'/tmp/deep-dim/{i}.png', v_)
+
 
         ops = [self.fpn1, self.fpn2, self.fpn3, self.fpn4]
         for i in range(len(features)):
