@@ -9,7 +9,7 @@ from torchvision import transforms
 
 from DIM import *
 from utils import all_sample_iou, plot_success_curve
-from vit_feature_extractor import build_backbone_config, extract_vit_features
+from feature_extractor_vit import build_backbone_config, extract_vit_features
 
 matplotlib.use('Agg')
 

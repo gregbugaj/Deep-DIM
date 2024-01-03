@@ -16,7 +16,7 @@ import torchvision
 from torchvision import models, transforms
 
 from DIM import *
-from resnet_feature_extractor import build_resnet_model, get_conv_layer_by_idx, extract_resnet_features
+from feature_extractor_resnet import build_resnet_model, get_conv_layer_by_idx, extract_resnet_features
 from utils import all_sample_iou, plot_success_curve
 
 matplotlib.use('Agg')
@@ -400,8 +400,8 @@ if args.Mode == 'All':
     layers = list(set(layers_conv1 + layers_conv2))
 
     # ResNet-18
-    layers_conv1 = [0, 1, 3, 5, 8, 10, 13, 15, 18]  # conv1
-    layers_conv2 = [2, 4, 6, 9, 11, 14, 16, 19]  # conv2
+    layers_conv1 = [0, 1, 3, 5, 8, 10]  # conv1
+    layers_conv2 = [2, 4, 6, 9, 11]  # conv2
 
     layers = layers_conv1 # list(set(layers_conv1 + layers_conv2))
 
@@ -409,7 +409,7 @@ else:
     if dataset == 'BBS':
         layers = (2, 19, 25)
     elif dataset == 'RMS':
-        layers = (1, 2, 3)  # .85/
+        layers = (0, 5, 7)  # .85/
     else:
         layers = (0, 16, 21)
 

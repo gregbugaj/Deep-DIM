@@ -1,18 +1,7 @@
-import torch
-
-import argparse
-import logging
-import os
-from typing import Union
-
-import cv2
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
 from torch.nn import Conv2d
-from torchvision import models, transforms
-from PIL import Image
 
 
 class FeatureOutput:
@@ -24,7 +13,9 @@ class FeatureOutput:
         self.outputs.append(feature)
 
     def clear(self):
+        """Clear the output buffer"""
         self.outputs = []
+
 
 def dump_model_info(model: nn.Module) -> None:
     count, idx = 0, 0

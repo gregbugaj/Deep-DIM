@@ -19,24 +19,29 @@ logger = logging.getLogger(__name__)
 normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 to_tensor = transforms.ToTensor()
 
+transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+])
 
-# scaler = transforms.Resize((224, 224))
+
+scaler = transforms.Resize((224, 224))
 
 
 def build_resnet_model():
-    # Load pre-trained ResNet-50
-    # resnet34
-    # model = models.resnet50(pretrained=True)
-    model = models.resnet34(pretrained=True)
+    # Load pre-trained ResNet model
+    # model = models.resnet34(pretrained=True)
     model = models.resnet18(pretrained=True)
     # Modify the first convolutional layer to handle dynamic input sizes
-    model.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
+    # model.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
 
     # remove the last two layers (avgpool and fc)
 
     model.avgpool = nn.Identity()
     model.fc = nn.Identity()
 
+    # prevent the model from learning
     for param in model.parameters():
         param.requires_grad = False
 
@@ -150,6 +155,7 @@ def extract_resnet_features(model: nn.Module, img: Union[torch.Tensor, np.ndarra
     if isinstance(img, np.ndarray):
         # Convert to N, C, H, W format
         batched_inputs = normalize(to_tensor(img)).unsqueeze(0)
+        # batched_inputs = transform(to_tensor(img)).unsqueeze(0)
         # batched_inputs = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).float()
     elif isinstance(img, torch.Tensor):
         # If the image is already a tensor we don't normalize it as it should normalized
@@ -171,6 +177,7 @@ def extract_resnet_features(model: nn.Module, img: Union[torch.Tensor, np.ndarra
     hook_handles = []
 
     for layer in layers:
+        print(layer)
         handle = layer.register_forward_hook(save_output)
         hook_handles.append(handle)
 

@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="vit_feature_extractor" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
+  <configuration default="false" name="feature_extractor_vit" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
     <module name="Deep-DIM" />
     <option name="ENV_FILES" value="" />
     <option name="INTERPRETER_OPTIONS" value="" />
@@ -8,13 +8,14 @@
       <env name="PYTHONUNBUFFERED" value="1" />
     </envs>
     <option name="SDK_HOME" value="" />
+    <option name="SDK_NAME" value="Python 3.10 (marie)" />
     <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
-    <option name="IS_MODULE_SDK" value="true" />
+    <option name="IS_MODULE_SDK" value="false" />
     <option name="ADD_CONTENT_ROOTS" value="true" />
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/vit_feature_extractor.py" />
-    <option name="PARAMETERS" value="--output_path ./generated --config-file ./configs/mask_rcnn_dit_base.yaml --image_path ~/dev/Deep-DIM/RMSdata/00-1.png" />
+    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/feature_extractor_vit.py" />
+    <option name="PARAMETERS" value="--output_path ./generated --config-file ./configs/mask_rcnn_dit_base.yaml --image_path ~/tmp/snippet-002.png" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

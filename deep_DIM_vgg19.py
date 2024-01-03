@@ -5,14 +5,8 @@ import copy
 import os
 from collections import OrderedDict
 
-import cv2
 import matplotlib
 import matplotlib.pyplot as plt
-import numpy as np
-import progressbar
-import torch
-import torch.nn.functional as F
-import torchvision
 from torchvision import models, transforms
 
 from DIM import *
@@ -22,6 +16,45 @@ matplotlib.use('Agg')
 
 
 # https://debuggercafe.com/visualizing-filters-and-feature-maps-in-convolutional-neural-networks-using-pytorch/
+
+def extract_hog_features(gray, channels, device) -> torch.Tensor:
+    # Apply HOG to the input image
+    from skimage.feature import hog
+    fd, hog_image = hog(gray, orientations=9, pixels_per_cell=(2, 2), cells_per_block=(2, 2), visualize=True, )
+
+    feature_arr = np.array(hog_image)
+    if False:
+        hog_image = np.expand_dims(hog_image, axis=0)  # add batch dimension
+        hog_image = np.expand_dims(hog_image, axis=0)  # add feature dimension
+        # convert to tensor
+        hog_feature = torch.from_numpy(hog_image).float().cuda()
+
+    return to_feature_map(feature_arr, channels, device)
+
+
+def extract_lbp_features(gray, channels, device) -> torch.Tensor:
+    from skimage.feature import local_binary_pattern
+    radius = 1
+    n_points = 8 * radius
+    lbp = local_binary_pattern(gray, n_points, radius, method="uniform")
+    lbp = lbp.astype("uint8")
+    feature_arr = np.array(lbp)
+
+    if False:
+        lbp = np.expand_dims(lbp, axis=0)  # add batch dimension
+        lbp = np.expand_dims(lbp, axis=0)  # add feature dimension
+        # convert to tensor
+        lbp_feature = torch.from_numpy(lbp).float().cuda()
+
+    return to_feature_map(feature_arr, channels, device)
+
+
+def to_feature_map(feature_arr, channels, device) -> torch.Tensor:
+    """create new tensor of N x C x H x W"""
+    features = torch.zeros((1, channels, feature_arr.shape[0], feature_arr.shape[1])).to(device)
+    # copy the feature to all channels
+    features[:, :, :, :] = torch.from_numpy(feature_arr).float().to(device)
+    return features
 
 
 class Featex:
@@ -35,6 +68,7 @@ class Featex:
         self.U3 = None
         self.model = copy.deepcopy(model.eval())
         self.model = self.model[:36]
+        # self.model = self.model[:19]
         for param in self.model.parameters():
             param.requires_grad = False
         if self.use_cuda:
@@ -59,9 +93,11 @@ class Featex:
         self.visualize_feature(self.feature3, 'feature3')
 
     def visualize_feature(self, feature, name):
+        if True:
+            return
+
         import matplotlib.pyplot as plt
 
-        return
         feature = feature.cpu().numpy()
 
         # feature = (feature - feature.min()) / (feature.max() - feature.min())
@@ -78,7 +114,7 @@ class Featex:
             plt.axis("on")
 
         print(f"Saving layer {name} feature maps...")
-        plt.savefig(f"./results/layer_{name}_{i}.png")
+        plt.savefig(f"./results/layer_{name}.png")
         plt.close()
 
     def __call__(self, input, mode='normal'):
@@ -100,8 +136,14 @@ class Featex:
         else:
             reducefeature3 = self.feature3
 
+        h = self.feature1.size()[3]
+        w = self.feature1.size()[2]
+
         if mode == 'big':
             # resize feature1 to the same size of feature2
+            w = self.feature3.size()[2]
+            h = self.feature3.size()[3]
+
             reducefeature1 = F.interpolate(
                 reducefeature1,
                 size=(self.feature3.size()[2], self.feature3.size()[3]),
@@ -128,7 +170,21 @@ class Featex:
                 align_corners=True,
             )
 
-        return torch.cat((reducefeature1, reducefeature2, reducefeature3), dim=1)
+        # Apply HOG and LBP  to the input image
+        # convert from tensor to numpy
+        src_input = input.squeeze(0).permute(1, 2, 0).cpu().numpy()
+        # blur the image
+        # src_input = cv2.GaussianBlur(src_input, (5, 5), 3)
+        gray = cv2.cvtColor(src_input, cv2.COLOR_BGR2GRAY)
+        gray = cv2.resize(gray, (h, w))
+
+        hog_feature = extract_hog_features(gray, channel, input.device)
+        # lbp_feature = extract_lbp_features(gray, channel, input.device)
+
+        # return torch.cat((hog_feature, hog_feature), dim=1)
+        # return torch.cat((hog_feature, lbp_feature), dim=1)
+        return torch.cat((hog_feature, reducefeature1, reducefeature2, reducefeature3), dim=1)
+        # return torch.cat((hog_feature, lbp_feature, reducefeature1, reducefeature2, reducefeature3), dim=1)
 
 
 def runpca(x, components, U):
@@ -194,8 +250,8 @@ def apply_DIM(I_row, SI_row, template_bbox, pad, pad1, image, numaddtemplates):
     print('Numtemplates=', len(templates))
     print('Preprocess done,start matching...')
     similarity = DIM_matching(SI, templates, 10)[
-        pad[0] : pad[0] + I.shape[2], pad[1] : pad[1] + I.shape[3]
-    ]
+                 pad[0]: pad[0] + I.shape[2], pad[1]: pad[1] + I.shape[3]
+                 ]
     # post processing
     similarity = cv2.resize(similarity, (image.shape[1], image.shape[0]))
     scale = 0.025
@@ -216,22 +272,23 @@ def apply_DIM(I_row, SI_row, template_bbox, pad, pad1, image, numaddtemplates):
 
 
 def apply_lbp(image):
-    return image
-
     from skimage.feature import local_binary_pattern
 
-    print('Applying LBP :', image.shape)
-    sharp = unsharp_mask(image, kernel_size=(0, 0), sigma=10)
+    if False:
+        print('Applying LBP :', image.shape)
+        sharp = unsharp_mask(image, kernel_size=(0, 0), sigma=10)
 
-    cv2.imwrite('sharp.png', sharp)
-    return sharp
+        cv2.imwrite('sharp.png', sharp)
+        return sharp
 
     lbp = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     radius = 2
     n_points = 8 * radius
 
     lbp = local_binary_pattern(lbp, n_points, radius, method="uniform")
-    lbp = (lbp).astype("uint8")
+    lbp = lbp.astype("uint8")
+
+    # convert to HOG
 
     lbp = cv2.merge([lbp] * 3)
     cv2.imwrite('lbp.png', lbp)
@@ -257,14 +314,14 @@ def unsharp_mask(image, kernel_size=(5, 5), sigma=1.0, amount=1.0, threshold=0):
 
 def model_eval(model, layer1, layer2, layer3, file_dir, use_cuda):
     if not os.path.exists(
-        'results/'
-        + file_dir
-        + '/'
-        + str(layer1)
-        + '_'
-        + str(layer2)
-        + '_'
-        + str(layer3)
+            'results/'
+            + file_dir
+            + '/'
+            + str(layer1)
+            + '_'
+            + str(layer2)
+            + '_'
+            + str(layer3)
     ):
         os.makedirs(
             'results/'
@@ -301,9 +358,9 @@ def model_eval(model, layer1, layer2, layer3, file_dir, use_cuda):
         image_gt = read_gt(gt[2 * idx + 1])
         root = 'results/' + file_dir + '/{m}/{n}.txt'
         if os.path.exists(
-            root.format(
-                n=idx + 1, m=str(layer1) + ':' + str(layer2) + ':' + str(layer3)
-            )
+                root.format(
+                    n=idx + 1, m=str(layer1) + ':' + str(layer2) + ':' + str(layer3)
+                )
         ):
             f = open(
                 root.format(
@@ -439,8 +496,10 @@ img_path = sorted(
 )
 
 model = models.vgg19(weights=models.vgg.VGG19_Weights.IMAGENET1K_V1)
+# model = models.vgg16(weights=models.vgg.VGG16_Weights.IMAGENET1K_V1)
+# model = models.vgg11()
 
-if False:
+if True:
     checkpoint = torch.load(
         'model/model_D.pth.tar', map_location=lambda storage, loc: storage
     )
@@ -459,6 +518,7 @@ print(img_path)
 if args.Mode == 'All':
     # There are 16 layers with learnable weights: 13 convolutional layers, and 3 fully connected layers.
     layers = (0, 2, 5, 7, 10, 12, 14, 16, 19, 21, 23, 25, 28, 30, 32, 34)
+    # layers = (0, 2, 5, 7, 10, 12, 14)
 else:
     if dataset == 'BBS':
         layers = (2, 19, 25)
@@ -476,12 +536,16 @@ for i in range(len(layers)):
         for k in range(len(layers)):
             if j >= k:
                 continue
-            layer1 = layers[i]
-            layer2 = layers[j]
-            layer3 = layers[k]
-            gt_list, pd_list = model_eval(model, layer1, layer2, layer3, file_dir, True)
-            iou_score = all_sample_iou(gt_list, pd_list)
-            plot_success_curve(
-                iou_score,
-                file_dir + '/' + str(layer1) + '_' + str(layer2) + '_' + str(layer3),
-            )
+            try:
+                layer1 = layers[i]
+                layer2 = layers[j]
+                layer3 = layers[k]
+                gt_list, pd_list = model_eval(model, layer1, layer2, layer3, file_dir, True)
+                iou_score = all_sample_iou(gt_list, pd_list)
+                plot_success_curve(
+                    iou_score,
+                    file_dir + '/' + str(layer1) + '_' + str(layer2) + '_' + str(layer3),
+                )
+            except Exception as e:
+                print(e)
+                continue

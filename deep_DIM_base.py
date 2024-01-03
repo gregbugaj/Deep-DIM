@@ -34,7 +34,7 @@ class Featex:
         self.U2 = None
         self.U3 = None
         self.model = copy.deepcopy(model.eval())
-        self.model = self.model[:28]
+        self.model = self.model[:36]
         for param in self.model.parameters():
             param.requires_grad = False
         if self.use_cuda:
@@ -438,7 +438,8 @@ img_path = sorted(
     [os.path.join(file_dir, i) for i in os.listdir(file_dir) if '.png' in i]
 )
 
-model = models.vgg16(weights=models.vgg.VGG16_Weights.IMAGENET1K_V1)
+model = models.vgg19(weights=models.vgg.VGG19_Weights.IMAGENET1K_V1)
+model = model.features
 
 if False:
     checkpoint = torch.load(
@@ -451,20 +452,17 @@ if False:
         new_state_dict[name] = v
     model.load_state_dict(new_state_dict)
 
-model = model.features
-
 print(gt)
 print(img_path)
 
 if args.Mode == 'All':
-    # VGG16 has 13 convolutional layers and 3 fully connected layers.
-    layers = (0, 2, 5, 7, 10, 12, 14, 16, 19, 21, 23, 25)
-    layers = (0, 2, 5, 7, 10, 12, 14, 16)
+    # There are 16 layers with learnable weights: 13 convolutional layers, and 3 fully connected layers.
+    layers = (0, 2, 5, 7, 10, 12, 14, 16, 19, 21, 23, 25, 28, 30, 32, 34)
 else:
     if dataset == 'BBS':
         layers = (2, 19, 25)
     elif dataset == 'RMS':
-        layers = (0, 5, 7)  # .85/
+        layers = (5, 5, 5)  # .85/
     else:
         layers = (0, 16, 21)
 

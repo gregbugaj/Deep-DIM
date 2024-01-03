@@ -1,6 +1,7 @@
 # MPViT : Multi-Path Vision Transformer for Dense Prediction
 # https://arxiv.org/pdf/2112.11010.pdf
 # https://medium.com/@hirotoschwert/digging-into-detectron-2-part-2-dd6e8b0526e
+# https://github.com/probcomp/bayes3d/blob/f6279f9d0a52dff5922c9d1a69c70449179b50eb/bayes3d/neural/dino.py#L391
 
 import argparse
 import logging
