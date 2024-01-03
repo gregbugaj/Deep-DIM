@@ -249,7 +249,7 @@ def apply_DIM(I_row, SI_row, template_bbox, pad, pad1, image, numaddtemplates):
         templates = template
     print('Numtemplates=', len(templates))
     print('Preprocess done,start matching...')
-    similarity = DIM_matching(SI, templates, 10)[
+    similarity = DIM_matching(SI, templates, 5)[
                  pad[0]: pad[0] + I.shape[2], pad[1]: pad[1] + I.shape[3]
                  ]
     # post processing
@@ -269,32 +269,6 @@ def apply_DIM(I_row, SI_row, template_bbox, pad, pad1, image, numaddtemplates):
         .numpy()
     )
     return similarity
-
-
-def apply_lbp(image):
-    from skimage.feature import local_binary_pattern
-
-    if False:
-        print('Applying LBP :', image.shape)
-        sharp = unsharp_mask(image, kernel_size=(0, 0), sigma=10)
-
-        cv2.imwrite('sharp.png', sharp)
-        return sharp
-
-    lbp = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    radius = 2
-    n_points = 8 * radius
-
-    lbp = local_binary_pattern(lbp, n_points, radius, method="uniform")
-    lbp = lbp.astype("uint8")
-
-    # convert to HOG
-
-    lbp = cv2.merge([lbp] * 3)
-    cv2.imwrite('lbp.png', lbp)
-
-    return lbp
-
 
 def unsharp_mask(image, kernel_size=(5, 5), sigma=1.0, amount=1.0, threshold=0):
     """Return a sharpened version of the image, using an unsharp mask."""
